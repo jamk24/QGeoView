@@ -19,15 +19,25 @@
 #pragma once
 
 #include "QGVLayerTiles.h"
+#include "QGVLayerTilesOnlineCache.h"
 
 #include <QNetworkReply>
+#include <QIODevice>
+#include <QFile>
+#include <QImage>
+#include <QPen>
+#include <QPainter>
 
 class QGV_LIB_DECL QGVLayerTilesOnline : public QGVLayerTiles
 {
     Q_OBJECT
 
 public:
+    QGVLayerTilesOnline();
     ~QGVLayerTilesOnline();
+    void setCache(bool mode);
+    void setOffline(bool mode);
+    int loadTilesFromGeo(QGV::GeoRect areaGeoRect, int zoom);
 
 protected:
     virtual QString tilePosToUrl(const QGV::GeoTilePos& tilePos) const = 0;
@@ -37,7 +47,12 @@ private:
     void cancel(const QGV::GeoTilePos& tilePos) override;
     void onReplyFinished(QNetworkReply* reply, const QGV::GeoTilePos& tilePos);
     void removeReply(const QGV::GeoTilePos& tilePos);
-
+    void incOfflineCnt();
 private:
     QMap<QGV::GeoTilePos, QNetworkReply*> mRequest;
+    QGVLayerTilesOnlineCache mCache;
+    int offline_counter = 0;
+    int offline_cnt_max = 50;
+    bool isOffline = false;
+    bool isCache = true;
 };

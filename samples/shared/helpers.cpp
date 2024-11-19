@@ -67,10 +67,18 @@ QSizeF Helpers::randSize(int baseSize)
 
 void Helpers::setupCachedNetworkAccessManager(QObject* parent)
 {
-    QDir("cacheDir").removeRecursively();
-    auto cache = new QNetworkDiskCache(parent);
-    cache->setCacheDirectory("cacheDir");
+
+    //QDir("cacheDir").removeRecursively();
+    //if (!QDir("cache").exists())
+    //{
+    QDir().mkdir("cache");
+    //}
+
+    //auto cache = new QNetworkDiskCache(parent);
+    //cache->setCacheDirectory("cacheDir");
+
     auto manager = new QNetworkAccessManager(parent);
-    manager->setCache(cache);
+    //manager->setCache(cache);
     QGV::setNetworkManager(manager);
+
 }

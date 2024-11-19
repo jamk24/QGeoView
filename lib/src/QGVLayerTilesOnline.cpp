@@ -19,6 +19,11 @@
 #include "QGVLayerTilesOnline.h"
 #include "Raster/QGVImage.h"
 
+QGVLayerTilesOnline::QGVLayerTilesOnline()
+{
+    mCache.init_cache();
+}
+
 QGVLayerTilesOnline::~QGVLayerTilesOnline()
 {
     qDeleteAll(mRequest);
@@ -27,10 +32,58 @@ QGVLayerTilesOnline::~QGVLayerTilesOnline()
 void QGVLayerTilesOnline::request(const QGV::GeoTilePos& tilePos)
 {
     Q_ASSERT(QGV::getNetworkManager());
-
-    const QUrl url(tilePosToUrl(tilePos));
-
+    QString tile_name(tilePosToUrl(tilePos));
+    const QUrl url(tile_name);
     QNetworkRequest request(url);
+
+
+    if (isCache)
+    {
+        // try to get tile from cache
+        QByteArray rawImage = mCache.getTileFromCache(tilePos, tile_name, getName());
+
+        // check if file exists in cache
+        if (rawImage.length())
+        {
+            auto tile = new QGVImage();
+            tile->setGeometry(tilePos.toGeoRect());
+            tile->loadImage(rawImage);
+            tile->setProperty("drawDebug",
+                          QString("%1\ntile(%2,%3,%4)")
+                                  .arg(tile_name)
+                                  .arg(tilePos.zoom())
+                                  .arg(tilePos.pos().x())
+                                  .arg(tilePos.pos().y()));
+            onTile(tilePos, tile);
+            return;
+        }
+        else
+        {
+            qgvDebug() << "file not in cache...";
+
+            if (isOffline)
+            {
+                // offline mode
+                auto tile_rect = new QGVImage();
+                tile_rect->setProperty("drawDebug",
+                          QString("%1\ntile(%2,%3,%4)")
+                                  .arg(tile_name)
+                                  .arg(tilePos.zoom())
+                                  .arg(tilePos.pos().x())
+                                  .arg(tilePos.pos().y()));
+
+                // offline mode
+                //QImage image = mCache.getNoData("NO DATA");
+                //image.save("no_data.png", "png", 100);
+                tile_rect->setGeometry(tilePos.toGeoRect());
+                tile_rect->loadImage(mCache.getNoData("NO DATA"));
+
+                onTile(tilePos, tile_rect);
+                return;
+            }
+        }
+    }
+
     QSslConfiguration conf = request.sslConfiguration();
     conf.setPeerVerifyMode(QSslSocket::VerifyNone);
 
@@ -45,9 +98,11 @@ void QGVLayerTilesOnline::request(const QGV::GeoTilePos& tilePos)
     QNetworkReply* reply = QGV::getNetworkManager()->get(request);
 
     mRequest[tilePos] = reply;
+    //=== connect(object1, SIGNAL(signal(int param)), object2, SLOT(slot()))
     connect(reply, &QNetworkReply::finished, reply, [this, reply, tilePos]() { onReplyFinished(reply, tilePos); });
 
     qgvDebug() << "request" << url;
+
 }
 
 void QGVLayerTilesOnline::cancel(const QGV::GeoTilePos& tilePos)
@@ -57,14 +112,26 @@ void QGVLayerTilesOnline::cancel(const QGV::GeoTilePos& tilePos)
 
 void QGVLayerTilesOnline::onReplyFinished(QNetworkReply* reply, const QGV::GeoTilePos& tilePos)
 {
-    if (reply->error() != QNetworkReply::NoError) {
-        if (reply->error() != QNetworkReply::OperationCanceledError) {
+    if (reply->error() != QNetworkReply::NoError)
+    {
+        // if network error - increment offline counter
+        incOfflineCnt();
+
+        if (reply->error() != QNetworkReply::OperationCanceledError)
+        {
             qgvCritical() << "ERROR" << reply->errorString();
         }
         removeReply(tilePos);
         return;
     }
     const auto rawImage = reply->readAll();
+
+    // save to file
+    if (isCache)
+    {
+        mCache.putTileToCache(tilePos, reply->url().toString(), getName(), rawImage);
+    }
+
     auto tile = new QGVImage();
     tile->setGeometry(tilePos.toGeoRect());
     tile->loadImage(rawImage);
@@ -88,4 +155,46 @@ void QGVLayerTilesOnline::removeReply(const QGV::GeoTilePos& tilePos)
     reply->abort();
     reply->close();
     reply->deleteLater();
+}
+void QGVLayerTilesOnline::setCache(bool mode)
+{
+    isCache = mode;
+    offline_counter = 0;
+}
+
+void QGVLayerTilesOnline::setOffline(bool mode)
+{
+    isOffline = mode;
+    offline_counter = 0;
+}
+
+void QGVLayerTilesOnline::incOfflineCnt()
+{
+    offline_counter++;
+    if (offline_counter > offline_cnt_max)
+    {
+        offline_counter = 0;
+    }
+}
+
+int QGVLayerTilesOnline::loadTilesFromGeo(QGV::GeoRect areaGeoRect, int zoom)
+{
+    const QPoint topLeft = QGV::GeoTilePos::geoToTilePos(zoom, areaGeoRect.topLeft()).pos();
+    const QPoint bottomRight = QGV::GeoTilePos::geoToTilePos(zoom, areaGeoRect.bottomRight()).pos();
+    QRect activeRect = QRect(topLeft, bottomRight);
+
+    qgvDebug() << "loadTilesFromGeo: rect" << activeRect.topLeft() << activeRect.bottomRight();
+
+    for (int x = activeRect.left(); x < activeRect.right(); ++x)
+    {
+        for (int y = activeRect.top(); y < activeRect.bottom(); ++y)
+        {
+            const auto tilePos = QGV::GeoTilePos(zoom, QPoint(x, y));
+            qgvDebug() << "loadTilesFromGeo: tilePos " << tilePos.pos().x() << tilePos.pos().y();
+            request(tilePos);
+        }
+    }
+
+
+    return 0;
 }

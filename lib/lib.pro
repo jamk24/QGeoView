@@ -31,6 +31,7 @@ HEADERS += \
     $$PWD/include/QGeoView/QGVWidgetZoom.h \
     $$PWD/include/QGeoView/Raster/QGVImage.h \
     $$PWD/include/QGeoView/Raster/QGVIcon.h \
+    $$PWD/include/QGeoView/QGVLayerTilesOnlineCache.h
 
 SOURCES += \
     $$PWD/src/QGVCamera.cpp \
@@ -57,7 +58,8 @@ SOURCES += \
     $$PWD/src/QGVWidgetText.cpp \
     $$PWD/src/QGVWidgetZoom.cpp \
     $$PWD/src/Raster/QGVImage.cpp \
-    $$PWD/src/Raster/QGVIcon.cpp
+    $$PWD/src/Raster/QGVIcon.cpp \
+    $$PWD/src/QGVLayerTilesOnlineCache.cpp
 
 INCLUDEPATH += \
     $$PWD/include/ \
@@ -76,3 +78,5 @@ header_files.files = $$HEADERS
 header_files.path = $${DESTDIR}/include/QGeoView
 header_files.CONFIG = no_check_exist
 INSTALLS += header_files
+
+LIBS += -lsqlite3
